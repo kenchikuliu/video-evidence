@@ -42,7 +42,8 @@ When the user asks to clone, reproduce, or generate a new video from the analyze
 4. Mark only reviewed shots as `approved: true`.
 5. Submit only after the user explicitly authorizes the current paid run. Real submission requires explicit shot selection plus `--submit --confirm-paid-api`.
 6. Upload a source or reference frame only when the user authorizes that upload. `--allow-reference-upload` is separate from paid-run confirmation.
-7. Poll and download completed clips, then assemble them in source order. Watch the finished output and check continuity, timing, text, audio, identity, and rights before publication.
+7. If a submission is interrupted, resume the same generation run with `--resume`; do not create duplicate provider tasks by rerunning into an existing output.
+8. Poll and download completed clips, then assemble them in source order. Watch the finished output and check continuity, timing, text, audio, identity, and rights before publication.
 
 Do not describe structural similarity as an exact copy or a guarantee of viral performance. MiniMax and Seedance are stochastic, provider limits may require generating a longer clip and trimming it, and short source cuts can be disproportionately expensive.
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -25,7 +26,12 @@ from analyze_video import (  # noqa: E402
 )
 from assemble_remake import build_ffmpeg_args as build_remake_ffmpeg_args  # noqa: E402
 from edit_plan import build_edit_plan  # noqa: E402
-from generate_remake import select_shots, validate_submission, write_run  # noqa: E402
+from generate_remake import (  # noqa: E402
+    load_resume_run,
+    select_shots,
+    validate_submission,
+    write_run,
+)
 from object_detection import DEFAULT_MODEL_PATH, postprocess, sample_times  # noqa: E402
 from remake_spec import build_remake_spec  # noqa: E402
 from render_edit import build_ffmpeg_args  # noqa: E402
@@ -36,8 +42,10 @@ from video_providers import (  # noqa: E402
     download_file,
     normalize_status,
     query_job,
+    resolve_reference,
     submit_job,
 )
+from poll_generation import download_ready, main as poll_main, pending_jobs  # noqa: E402
 
 
 class SamplingTests(unittest.TestCase):
@@ -330,6 +338,53 @@ class RemakeSpecTests(unittest.TestCase):
             )
             self.assertFalse(output.with_suffix(".json.tmp").exists())
 
+    def test_resume_run_requires_matching_execution_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "generation.json"
+            write_run(
+                output,
+                {
+                    "kind": "video_generation_run",
+                    "provider": "minimax",
+                    "model": "MiniMax-Hailuo-2.3",
+                    "endpoint": "https://api.minimax.io",
+                    "api_key_env": "MINIMAX_API_KEY",
+                    "execution": {
+                        "mode": "dry_run",
+                        "reference_upload_allowed": False,
+                    },
+                    "jobs": [
+                        {
+                            "shot_id": "shot-001",
+                            "status": "planned",
+                            "reference_mode": "none",
+                        }
+                    ],
+                },
+            )
+            loaded = load_resume_run(
+                output,
+                "minimax",
+                "MiniMax-Hailuo-2.3",
+                "https://api.minimax.io",
+                "MINIMAX_API_KEY",
+                False,
+                "none",
+                False,
+            )
+            self.assertEqual(loaded["jobs"][0]["shot_id"], "shot-001")
+            with self.assertRaisesRegex(ValueError, "same dry-run"):
+                load_resume_run(
+                    output,
+                    "minimax",
+                    "MiniMax-Hailuo-2.3",
+                    "https://api.minimax.io",
+                    "MINIMAX_API_KEY",
+                    True,
+                    "none",
+                    False,
+                )
+
 
 class MockProviderHandler(BaseHTTPRequestHandler):
     requests: list[dict] = []
@@ -434,6 +489,57 @@ class ProviderContractTests(unittest.TestCase):
         self.assertEqual(normalize_status("Queueing"), "queued")
         self.assertEqual(normalize_status("Processing"), "running")
         self.assertEqual(normalize_status("failed"), "failed")
+
+    def test_relative_reference_uses_declared_base_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "frame.jpg").write_bytes(b"jpeg")
+            reference = resolve_reference("frame.jpg", True, root)
+        self.assertTrue(reference.startswith("data:image/jpeg;base64,"))
+
+
+class PollGenerationTests(unittest.TestCase):
+    def test_completed_run_does_not_need_api_key(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run_path = Path(directory) / "run.json"
+            run_path.write_text(
+                json.dumps(
+                    {
+                        "kind": "video_generation_run",
+                        "api_key_env": "VIDEO_EVIDENCE_TEST_KEY",
+                        "jobs": [{"shot_id": "shot-001", "status": "succeeded"}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with patch.object(sys, "argv", ["poll_generation.py", str(run_path)]), patch.dict(
+                os.environ, {}, clear=True
+            ):
+                self.assertEqual(poll_main(), 0)
+
+    def test_download_rejects_unsafe_shot_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            run = {
+                "jobs": [
+                    {
+                        "shot_id": "../outside",
+                        "status": "succeeded",
+                        "download_url": "https://example.invalid/clip.mp4",
+                    }
+                ]
+            }
+            self.assertEqual(download_ready(run, Path(directory)), 1)
+            self.assertIn("unsafe shot id", run["jobs"][0]["download_error"])
+
+    def test_pending_jobs_only_include_nonterminal_tasks(self) -> None:
+        run = {
+            "jobs": [
+                {"task_id": "queued", "status": "submitted"},
+                {"task_id": "done", "status": "succeeded"},
+                {"task_id": None, "status": "submission_failed"},
+            ]
+        }
+        self.assertEqual([job["task_id"] for job in pending_jobs(run)], ["queued"])
 
 
 if __name__ == "__main__":

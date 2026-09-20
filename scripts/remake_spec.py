@@ -277,6 +277,8 @@ def main() -> int:
         args.reference_policy,
         args.rights_mode,
     )
+    spec["source"]["analysis_path"] = str(analysis_path)
+    spec["source"]["reference_base_dir"] = str(analysis_path.parent)
     output = (args.output or analysis_path.with_name("remake_spec.json")).resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(spec, ensure_ascii=False, indent=2), encoding="utf-8")

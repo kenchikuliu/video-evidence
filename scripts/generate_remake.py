@@ -55,8 +55,51 @@ def validate_submission(
 def write_run(path: Path, run: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    try:
+        temporary.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def load_resume_run(
+    path: Path,
+    provider: str,
+    model: str,
+    endpoint: str,
+    api_key_env: str,
+    submit: bool,
+    reference_mode: str,
+    allow_reference_upload: bool,
+) -> dict:
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    run = json.loads(path.read_text(encoding="utf-8"))
+    if run.get("kind") != "video_generation_run":
+        raise ValueError("existing output is not a video_generation_run")
+    expected_mode = "submitted" if submit else "dry_run"
+    if run.get("provider") != provider or run.get("model") != model:
+        raise ValueError("--resume requires the same provider and model as the existing run")
+    if run.get("endpoint") != endpoint or run.get("api_key_env") != api_key_env:
+        raise ValueError("--resume requires the same endpoint and API-key environment as the existing run")
+    if run.get("execution", {}).get("mode") != expected_mode:
+        raise ValueError("--resume requires the same dry-run or submitted mode as the existing run")
+    if run.get("execution", {}).get("reference_upload_allowed") != allow_reference_upload:
+        raise ValueError("--resume requires the same reference-upload setting as the existing run")
+    if not isinstance(run.get("jobs"), list):
+        raise ValueError("existing output has no valid jobs list")
+    incompatible = [
+        str(job.get("shot_id"))
+        for job in run["jobs"]
+        if not job.get("task_id")
+        and job.get("reference_mode") not in (None, reference_mode)
+    ]
+    if incompatible:
+        raise ValueError(
+            f"--resume requires the same reference mode for incomplete jobs: {incompatible}"
+        )
+    return run
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,6 +122,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--watermark", action="store_true")
     parser.add_argument("--submit", action="store_true")
     parser.add_argument("--confirm-paid-api", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume an existing run and skip jobs that already have a task id.",
+    )
     return parser
 
 
@@ -110,22 +158,47 @@ def main() -> int:
     output = (
         args.output or spec_path.with_name(f"{args.provider}_generation_run.json")
     ).resolve()
-    run = {
-        "schema_version": 1,
-        "kind": "video_generation_run",
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "source_spec": str(spec_path),
-        "provider": args.provider,
-        "model": model,
-        "endpoint": endpoint,
-        "api_key_env": api_key_env,
-        "output": spec.get("output", {}),
-        "execution": {
-            "mode": "submitted" if args.submit else "dry_run",
-            "paid_api_submission": args.submit,
-            "reference_upload_allowed": args.allow_reference_upload,
-        },
-        "jobs": [],
+    if output.exists() and not args.resume:
+        raise FileExistsError(f"output exists; pass --resume to continue it: {output}")
+    run = (
+        load_resume_run(
+            output,
+            args.provider,
+            model,
+            endpoint,
+            api_key_env,
+            args.submit,
+            args.reference_mode,
+            args.allow_reference_upload,
+        )
+        if args.resume
+        else {
+            "schema_version": 1,
+            "kind": "video_generation_run",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "source_spec": str(spec_path),
+            "provider": args.provider,
+            "model": model,
+            "endpoint": endpoint,
+            "api_key_env": api_key_env,
+            "output": spec.get("output", {}),
+            "execution": {
+                "mode": "submitted" if args.submit else "dry_run",
+                "paid_api_submission": args.submit,
+                "reference_upload_allowed": args.allow_reference_upload,
+            },
+            "jobs": [],
+        }
+    )
+    existing_jobs = {
+        str(job.get("shot_id")): job
+        for job in run.get("jobs", [])
+        if job.get("shot_id") is not None
+    }
+    existing_indexes = {
+        str(job.get("shot_id")): index
+        for index, job in enumerate(run.get("jobs", []))
+        if job.get("shot_id") is not None
     }
 
     api_key = None
@@ -136,11 +209,21 @@ def main() -> int:
 
     failures = 0
     for shot in shots:
+        existing = existing_jobs.get(str(shot.get("id")))
+        if args.resume and existing and existing.get("task_id"):
+            continue
+        if args.resume and existing and not args.submit and existing.get("status") == "planned":
+            continue
         reference = None
         reference_note = None
         if args.reference_mode == "first-frame":
             if args.allow_reference_upload:
-                reference = resolve_reference(shot.get("reference_frame"), True)
+                reference_base = spec.get("source", {}).get("reference_base_dir")
+                reference = resolve_reference(
+                    shot.get("reference_frame"),
+                    True,
+                    Path(reference_base) if reference_base else spec_path.parent,
+                )
             else:
                 reference_note = "Reference omitted from dry run; upload was not allowed."
         payload = build_payload(
@@ -166,7 +249,10 @@ def main() -> int:
             "download_url": None,
             "local_path": None,
         }
-        run["jobs"].append(job)
+        if args.resume and str(shot.get("id")) in existing_indexes:
+            run["jobs"][existing_indexes[str(shot.get("id"))]] = job
+        else:
+            run["jobs"].append(job)
         write_run(output, run)
         if not args.submit:
             continue

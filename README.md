@@ -117,6 +117,8 @@ python scripts/generate_remake.py C:\path\video-analysis\remake_spec.json `
 
 Real submission requires reviewed shots with `approved: true`, explicit shot selection, `--submit`, and `--confirm-paid-api`. Uploading a reference frame additionally requires `--allow-reference-upload`. API keys are read only from `MINIMAX_API_KEY` or `ARK_API_KEY`, never from command arguments.
 
+Generation run files are not overwritten by default. Use `--resume` after an interruption to preserve jobs that already have provider task IDs and retry only incomplete submissions.
+
 After submission, poll and download clips, then assemble them:
 
 ```powershell

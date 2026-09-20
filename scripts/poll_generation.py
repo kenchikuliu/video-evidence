@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -14,9 +15,14 @@ TERMINAL = {"succeeded", "failed", "submission_failed"}
 
 
 def write_run(path: Path, run: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
-    temporary.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    try:
+        temporary.write_text(json.dumps(run, ensure_ascii=False, indent=2), encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
 
 
 def pending_jobs(run: dict) -> list[dict]:
@@ -51,7 +57,12 @@ def download_ready(run: dict, directory: Path) -> int:
             failures += 1
             job["download_error"] = "provider reported success without a download URL"
             continue
-        output = directory / f"{job['shot_id']}.mp4"
+        shot_id = str(job.get("shot_id", ""))
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", shot_id):
+            failures += 1
+            job["download_error"] = f"unsafe shot id for download filename: {shot_id!r}"
+            continue
+        output = directory / f"{shot_id}.mp4"
         try:
             download_file(str(url), output)
             job["local_path"] = str(output.resolve())
@@ -81,14 +92,19 @@ def main() -> int:
     run = json.loads(run_path.read_text(encoding="utf-8"))
     if run.get("kind") != "video_generation_run":
         raise ValueError("input is not a video_generation_run")
-    key_name = run.get("api_key_env")
-    api_key = os.environ.get(str(key_name))
-    if not api_key:
-        raise ValueError(f"missing API key environment variable: {key_name}")
+    api_key = None
+    if pending_jobs(run):
+        key_name = run.get("api_key_env")
+        api_key = os.environ.get(str(key_name))
+        if not api_key:
+            raise ValueError(f"missing API key environment variable: {key_name}")
 
     started = time.monotonic()
     while True:
-        poll_once(run, api_key)
+        remaining = pending_jobs(run)
+        if not remaining:
+            break
+        poll_once(run, api_key or "")
         write_run(run_path, run)
         remaining = pending_jobs(run)
         if not args.wait or not remaining:

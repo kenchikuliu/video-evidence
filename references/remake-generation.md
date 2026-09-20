@@ -50,6 +50,8 @@ python scripts/generate_remake.py C:\path\remake_spec.json `
 
 Dry-run is the default. It does not read an API key or contact either generation endpoint. Compare the generated request payloads, generated durations, model, resolution, and shot count before choosing a provider.
 
+The output file is protected from accidental replacement. If a local process was interrupted, rerun the same command with `--resume`; existing planned dry-run jobs and jobs that already have a provider task ID are retained.
+
 Current defaults, verified against official documentation and official SDK examples on 2026-09-20:
 
 | Provider | Default model | Base endpoint | Credential environment variable |
@@ -59,7 +61,7 @@ Current defaults, verified against official documentation and official SDK examp
 
 Override `--model`, `--endpoint`, `--resolution`, or `--ratio` when the account exposes a different model or region. Provider model catalogs change; do not assume a default remains available.
 
-MiniMax v1 accepts model-dependent 6- or 10-second generations. The adapter generates at the supported duration and the assembler trims to `requested_duration`. Seedance duration support is model-dependent; the adapter accepts 2–12 seconds and rounds fractional durations up.
+MiniMax v1 accepts model-dependent 6- or 10-second generations. The adapter generates at the supported duration and the assembler trims to `requested_duration`. Seedance duration support is model-dependent; the adapter accepts 2-12 seconds and rounds fractional durations up.
 
 ## 3. Submit An Explicit Paid Run
 
@@ -93,6 +95,8 @@ Submission is rejected when:
 - Reference-guided generation was requested without `--allow-reference-upload`.
 - The expected API-key environment variable is absent.
 
+If submission is interrupted after some tasks were created, rerun the same command with `--resume`. Jobs with an existing task ID are skipped, while a job recorded as `submission_failed` can be retried. Keep the provider, model, endpoint, and API-key environment unchanged when resuming.
+
 Text-to-video is the default. For a user-authorized first-frame upload, add:
 
 ```powershell
@@ -116,6 +120,8 @@ python scripts/poll_generation.py C:\path\minimax_generation_run.json `
   --wait --timeout 1800 `
   --download-dir C:\path\clips
 ```
+
+Once all jobs are terminal, polling or downloading the run does not require the API key; pending jobs still require the key for status queries.
 
 Assemble downloaded clips in source order:
 

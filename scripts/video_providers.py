@@ -44,7 +44,9 @@ def data_uri(path: Path) -> str:
     return f"data:{mime};base64,{encoded}"
 
 
-def resolve_reference(value: str | None, allow_upload: bool) -> str | None:
+def resolve_reference(
+    value: str | None, allow_upload: bool, base_dir: Path | None = None
+) -> str | None:
     if not value:
         return None
     if not allow_upload:
@@ -52,7 +54,10 @@ def resolve_reference(value: str | None, allow_upload: bool) -> str | None:
     parsed = urllib.parse.urlparse(value)
     if parsed.scheme in {"http", "https", "data"}:
         return value
-    return data_uri(Path(value))
+    local_path = Path(value)
+    if not local_path.is_absolute() and base_dir is not None:
+        local_path = base_dir / local_path
+    return data_uri(local_path)
 
 
 def minimax_duration(requested: float) -> int:
