@@ -1,0 +1,5 @@
+rapidocr>=3.9,<4
+numpy>=1.24
+onnxruntime>=1.20
+opencv-python>=4.5
+scenedetect>=0.7,<0.8
