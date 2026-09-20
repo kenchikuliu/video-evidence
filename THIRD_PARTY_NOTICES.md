@@ -23,3 +23,7 @@ Python and system dependencies are not vendored. Their respective licenses and n
 - faster-whisper (optional): <https://github.com/SYSTRAN/faster-whisper>
 
 Users are responsible for reviewing dependency licenses for their distribution and deployment scenario.
+
+## Optional Cloud Services
+
+MiniMax and Volcengine Ark/Seedance are not bundled dependencies. Optional API use is governed by each provider's current terms, content rules, data handling, availability, and pricing. This project does not include credentials or provider credits.

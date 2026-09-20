@@ -110,6 +110,8 @@ python scripts/render_edit.py C:\path\output\edit_plan.json C:\path\output\edite
 
 The plan keeps source order. ASR segments are atomic, so a rendered result may exceed the target slightly rather than cut a sentence in half. Always watch the rendered file and check cuts, audio continuity, legibility, and factual accuracy.
 
+For a generative structural remake with MiniMax or Seedance, read [remake-generation.md](remake-generation.md). That workflow is separate from deterministic source-video editing and defaults to a no-cost dry run.
+
 ## Failure Handling
 
 - If `ffprobe` or `ffmpeg` is missing, stop and report the missing executable.

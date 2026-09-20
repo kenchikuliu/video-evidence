@@ -1,4 +1,4 @@
 interface:
   display_name: "Video Evidence"
-  short_description: "Local, auditable video analysis and edit planning"
-  default_prompt: "Use $video-evidence to analyze this local video into timestamped evidence, clearly separating observations from interpretation."
+  short_description: "Analyze and structurally remake videos with evidence"
+  default_prompt: "Use $video-evidence to analyze this local video, create an auditable shot plan, and dry-run a structural remake without submitting a paid API call."

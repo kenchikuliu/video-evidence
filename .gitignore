@@ -14,7 +14,11 @@ analysis.json
 timeline.md
 semantic_review.json
 edit_plan.json
+remake_spec.json
+*_generation_run.json
 edited*.mp4
+remake*.mp4
+clips/
 
 *.mp4
 *.mov

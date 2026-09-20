@@ -1,8 +1,8 @@
 # Video Evidence
 
-A Codex skill and local CLI for turning video into an auditable evidence timeline. It extracts media metadata, audio state, scene boundaries, sampled frames, and OCR. Optional stages add local Whisper transcription, YOLO11n object detection, grounded Ollama review, and an evidence-based edit plan.
+A Codex skill and local CLI for turning video into an auditable evidence timeline and an editable structural-remake plan. It extracts media metadata, audio state, scene boundaries, sampled frames, and OCR. Optional stages add local Whisper transcription, YOLO11n object detection, grounded Ollama review, MiniMax/Seedance request planning, and deterministic assembly.
 
-The default workflow does not require an account, upload the source video, or call a paid API.
+Analysis and generation dry-runs do not require an account, upload the source video, or call a paid API. Real cloud generation is opt-in and guarded separately.
 
 ## What It Produces
 
@@ -10,6 +10,8 @@ The default workflow does not require an account, upload the source video, or ca
 - `timeline.md`: readable timestamped evidence.
 - `semantic_review.json` and `ANALYSIS.md`: optional local-model interpretation with citation validation.
 - `edit_plan.json`, `BRIEF.md`, and `TREATMENT.md`: optional deterministic edit planning.
+- `remake_spec.json`: provider-neutral, evidence-linked shot prompts with explicit approval state.
+- `*_generation_run.json`: dry-run or submitted MiniMax/Seedance jobs without stored API keys.
 - A rendered evidence reel after explicit FFmpeg rendering.
 
 ## Install As A Codex Skill
@@ -29,7 +31,7 @@ Alternatively, place this repository at:
 Restart Codex after installation. Invoke it with `$video-evidence`, for example:
 
 ```text
-Use $video-evidence to analyze C:\path\video.mp4 locally and report only timestamped, grounded findings.
+Use $video-evidence to analyze C:\path\video.mp4, build an evidence-linked structural remake, and dry-run both providers without paid submission.
 ```
 
 ## Runtime Setup
@@ -90,6 +92,43 @@ python scripts/render_edit.py C:\path\video-analysis\edit_plan.json `
 
 See [`references/workflow.md`](references/workflow.md) for the full workflow.
 
+## Structural Remake With MiniMax Or Seedance
+
+Create a provider-neutral shot specification:
+
+```powershell
+python scripts/remake_spec.py C:\path\video-analysis\analysis.json `
+  --brief "Create an original vertical product ad with the same pacing roles" `
+  --aspect-ratio 9:16 `
+  --output C:\path\video-analysis\remake_spec.json
+```
+
+Dry-run either provider without an API key or network submission:
+
+```powershell
+python scripts/generate_remake.py C:\path\video-analysis\remake_spec.json `
+  --provider minimax `
+  --output C:\path\video-analysis\minimax_generation_run.json
+
+python scripts/generate_remake.py C:\path\video-analysis\remake_spec.json `
+  --provider seedance `
+  --output C:\path\video-analysis\seedance_generation_run.json
+```
+
+Real submission requires reviewed shots with `approved: true`, explicit shot selection, `--submit`, and `--confirm-paid-api`. Uploading a reference frame additionally requires `--allow-reference-upload`. API keys are read only from `MINIMAX_API_KEY` or `ARK_API_KEY`, never from command arguments.
+
+After submission, poll and download clips, then assemble them:
+
+```powershell
+python scripts/poll_generation.py C:\path\video-analysis\minimax_generation_run.json `
+  --wait --download-dir C:\path\video-analysis\clips
+
+python scripts/assemble_remake.py C:\path\video-analysis\minimax_generation_run.json `
+  C:\path\video-analysis\remake.mp4
+```
+
+See [`references/remake-generation.md`](references/remake-generation.md) for provider contracts, cost guards, model limits, and the complete workflow.
+
 ## Reproducible Scoring
 
 Score one or more `analysis.json` files against expectations written before viewing system outputs:
@@ -117,8 +156,10 @@ Important limits: the baseline was not Hypit's official hosted model; object ite
 
 - Analysis stays local unless you explicitly move or publish its artifacts.
 - Generated frames and transcripts may contain sensitive information.
+- Cloud generation uploads prompts and any explicitly enabled reference media to the selected provider.
 - OCR, ASR, and sampled detections are incomplete observations, not ground truth.
 - The semantic layer must cite evidence and must not overwrite deterministic output.
+- Structural similarity is not an exact copy and cannot guarantee viral performance.
 
 ## License
 

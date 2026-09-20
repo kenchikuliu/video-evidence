@@ -1,6 +1,6 @@
 ---
 name: video-evidence
-description: "Analyze videos locally into auditable evidence timelines using FFprobe, scene detection, OCR, optional Whisper transcription, YOLO object detection, grounded Ollama review, and reproducible manifest scoring. Use when Codex needs to inspect, compare, summarize, benchmark, or create an evidence-based edit plan for a local video without uploading it or using a paid API."
+description: "Analyze videos into auditable evidence timelines and turn approved shot structures into provider-neutral remake plans for MiniMax or Seedance. Use when Codex needs to inspect, compare, summarize, benchmark, edit, or structurally remake a local video while keeping paid API submission and reference uploads explicit."
 ---
 
 # Video Evidence
@@ -30,7 +30,21 @@ Read [references/workflow.md](references/workflow.md) for commands, outputs, opt
 - Add `--semantic-review` only when a local Ollama vision model is already available or the user approves downloading one. This step uses the configured local endpoint and must not replace deterministic evidence.
 - Use `scripts/render_edit.py` to render a checked `edit_plan.json` with FFmpeg.
 
-Do not require an account, upload media, or call a paid API. Do not claim that local processing is cost-free when the machine, bandwidth, or model downloads still have resource costs.
+The analysis and planning stages must not require an account, upload media, or call a paid API. Do not claim that local processing is cost-free when the machine, bandwidth, or model downloads still have resource costs.
+
+## Create A Structural Remake
+
+When the user asks to clone, reproduce, or generate a new video from the analyzed structure, read [references/remake-generation.md](references/remake-generation.md).
+
+1. Build `remake_spec.json` from `analysis.json`. Default to `structure-only` unless the user states they own or may reuse all source material.
+2. Review every shot's prompt, duration, evidence, text, dialogue, and reference frame. Replace source identities, logos, music, characters, and brand assets with user-owned material when operating in structure-only mode.
+3. Run both provider adapters in dry-run mode before choosing one. Dry-run must not read an API key or contact a generation endpoint.
+4. Mark only reviewed shots as `approved: true`.
+5. Submit only after the user explicitly authorizes the current paid run. Real submission requires explicit shot selection plus `--submit --confirm-paid-api`.
+6. Upload a source or reference frame only when the user authorizes that upload. `--allow-reference-upload` is separate from paid-run confirmation.
+7. Poll and download completed clips, then assemble them in source order. Watch the finished output and check continuity, timing, text, audio, identity, and rights before publication.
+
+Do not describe structural similarity as an exact copy or a guarantee of viral performance. MiniMax and Seedance are stochastic, provider limits may require generating a longer clip and trimming it, and short source cuts can be disproportionately expensive.
 
 ## Keep Claims Grounded
 
@@ -54,6 +68,7 @@ Read [references/benchmarking.md](references/benchmarking.md) before comparing s
 ## Protect User Data
 
 - Keep source videos and generated frames local unless the user explicitly requests publication and owns the rights.
+- Treat cloud generation as an upload even when only a reference frame is sent.
 - Exclude videos, analysis outputs, model caches, tokens, and machine-specific absolute paths from repositories.
 - Do not infer sensitive traits from faces, voices, or surroundings.
 - Stop before rendering over an existing output unless the overwrite is explicitly intended.
